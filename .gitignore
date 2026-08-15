@@ -1,0 +1,21 @@
+# Python
+api/.venv/
+__pycache__/
+*.pyc
+api/test.db*
+
+# Node
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Generated PWA icons (produced at build time by scripts/gen-icons.mjs)
+web/public/pwa-*.png
+web/public/apple-touch-icon.png
+
+# Env / data
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
