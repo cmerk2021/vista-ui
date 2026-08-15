@@ -50,6 +50,7 @@ class TpiClient:
         self._stop = False
         self._supervisor: Optional[asyncio.Task] = None
         self._reconnect_signal = asyncio.Event()
+        self._session_established = False
 
     # --- lifecycle ----------------------------------------------------------
 
@@ -83,9 +84,9 @@ class TpiClient:
     async def _supervise(self) -> None:
         backoff = 2
         while not self._stop:
+            self._session_established = False
             try:
                 await self._connect_once()
-                backoff = 2
             except asyncio.CancelledError:
                 raise
             except AuthError as exc:
@@ -95,6 +96,10 @@ class TpiClient:
             except Exception as exc:  # noqa: BLE001 - network layer, keep looping
                 log.warning("Envisalink connection lost: %s", exc)
                 self._set_disconnected()
+            # A drop after we were logged in is transient (e.g. the EVL closing an
+            # idle socket); reconnect promptly instead of backing off.
+            if self._session_established:
+                backoff = 1
             if self._stop:
                 break
             self._reconnect_signal.clear()
@@ -102,7 +107,8 @@ class TpiClient:
                 await asyncio.wait_for(self._reconnect_signal.wait(), timeout=backoff)
             except asyncio.TimeoutError:
                 pass
-            backoff = min(backoff * 2, 30)
+            if not self._session_established:
+                backoff = min(backoff * 2, 30)
 
     def _set_disconnected(self) -> None:
         self.state.connected = False
@@ -118,6 +124,7 @@ class TpiClient:
         self.state.connected = True
         await self._login(reader, writer, password)
         self.state.logged_in = True
+        self._session_established = True
         bus.publish({"type": "status", "state": self.state.to_dict()})
         await db.insert_event(event_type="connected", detail=f"Connected to {host}:{port}")
 

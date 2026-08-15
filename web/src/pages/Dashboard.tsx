@@ -9,6 +9,7 @@ import { ZoneIcon } from "../components/ZoneIcon";
 
 export function Dashboard() {
   const panel = useStore((s) => s.panel);
+  const wsConnected = useStore((s) => s.wsConnected);
   const zones = useStore((s) => s.zones);
   const setZones = useStore((s) => s.setZones);
   const liveEvents = useStore((s) => s.liveEvents);
@@ -22,7 +23,9 @@ export function Dashboard() {
   const dp = String(panel?.default_partition ?? 1);
   const part = panel?.partitions[dp];
   const meta = statusMeta(part?.state);
-  const connected = panel?.logged_in ?? false;
+  const linkUp = wsConnected && (panel?.logged_in ?? false);
+  const connected = linkUp;
+  const reconnecting = !linkUp && !!part;
   const armed = ARMED_STATES.has(part?.state ?? "");
   const inAlarm = part?.state === "alarm" || part?.keypad.led?.alarm;
 
@@ -53,11 +56,17 @@ export function Dashboard() {
         <div className="row between">
           <span className={pillClass(meta.tone)}>Partition {dp}</span>
           <span className="mono dim" style={{ fontSize: 11 }}>
-            {panel?.last_update ? formatTime(panel.last_update) : "—"}
+            {reconnecting ? "reconnecting…" : panel?.last_update ? formatTime(panel.last_update) : "—"}
           </span>
         </div>
-        <div className="status-label">{connected ? meta.label : "Offline"}</div>
-        <div className="muted">{connected ? meta.hint : "Not connected to the Envisalink"}</div>
+        <div className="status-label">{part ? meta.label : linkUp ? "Waiting…" : "Offline"}</div>
+        <div className="muted">
+          {!linkUp
+            ? part
+              ? "Reconnecting to the panel…"
+              : "Not connected to the Envisalink"
+            : meta.hint}
+        </div>
         {part?.keypad.line1 ? (
           <div className="keypad-strip mono">
             <div>{part.keypad.line1.trimEnd()}</div>
