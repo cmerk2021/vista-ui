@@ -298,6 +298,9 @@ class TpiClient:
         ks.beep = ku.beep
         ks.user_or_zone = ku.user_or_zone
         await self._eval_trouble(ku.partition, prev, ku.led)
+        # Honeywell/Vista panels convey live partition status via the keypad LEDs,
+        # not a periodic 02 command, so derive it here.
+        await self._apply_partition_state(ku.partition, p.partition_state_from_leds(ku.led, ku.beep))
         self._publish_state()
 
     async def _eval_trouble(self, partition: int, prev: dict[str, bool], new: dict[str, bool]) -> None:
@@ -353,11 +356,19 @@ class TpiClient:
     async def _on_partitions(self, data: str) -> None:
         states = p.parse_partition_states(data)
         for part, st in states.items():
-            prev = self.state.partitions.get(part)
-            self.state.partitions[part] = st
-            if prev != st:
-                await self._on_partition_transition(part, prev, st)
+            # Ignore "not_used" from the 02 command for partitions the keypad
+            # already reports, so it can't overwrite the derived live state.
+            if st == "not_used" and part in self.state.partitions:
+                continue
+            await self._apply_partition_state(part, st)
         self._publish_state()
+
+    async def _apply_partition_state(self, part: int, new: str) -> None:
+        prev = self.state.partitions.get(part)
+        if prev == new:
+            return
+        self.state.partitions[part] = new
+        await self._on_partition_transition(part, prev, new)
 
     async def _on_partition_transition(self, part: int, prev: Optional[str], new: str) -> None:
         prev_armed = prev in ARMED_STATES

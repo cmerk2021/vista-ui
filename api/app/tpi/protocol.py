@@ -77,6 +77,32 @@ PARTITION_STATES = {
 
 ARMED_STATES = {"armed_stay", "armed_away", "armed_instant", "armed_max"}
 
+
+def partition_state_from_leds(led: dict[str, bool], beep: str = "off") -> str:
+    """Derive an abstracted partition state from a keypad LED bitfield.
+
+    Honeywell/Vista firmware reports live status primarily through the periodic
+    Virtual Keypad Update (command 00) LED flags, not the 02 partition command,
+    so this is the primary state source for those panels.
+    """
+    zero_entry = led.get("armed_zero_entry", False)
+    if led.get("alarm"):
+        return "alarm"
+    if led.get("armed_away"):
+        return "armed_max" if zero_entry else "armed_away"
+    if led.get("armed_stay"):
+        return "armed_instant" if zero_entry else "armed_stay"
+    if zero_entry:
+        return "armed_instant"
+    if beep == "continuous_slow":  # exit delay beep
+        return "exit_delay"
+    if led.get("ready"):
+        return "ready_bypass" if led.get("bypass") else "ready"
+    if led.get("alarm_in_memory"):
+        return "alarm_in_memory"
+    return "not_ready"
+
+
 # --- Beep field -------------------------------------------------------------
 BEEP_STATES = {
     0: "off",
